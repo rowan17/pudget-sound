@@ -1,0 +1,109 @@
+{
+  "tideData": {
+    "Anacortes, Guemes Channel": {
+      "predictions": [
+        {
+          "t": "2025-01-01 07:10",
+          "v": "9.28",
+          "type": "H"
+        },
+        {
+          "t": "2025-01-01 11:47",
+          "v": "7.67",
+          "type": "L"
+        },
+        {
+          "t": "2025-01-01 15:42",
+          "v": "7.934",
+          "type": "H"
+        },
+        {
+          "t": "2025-01-01 23:30",
+          "v": "-2.055",
+          "type": "L"
+        }
+      ]
+    }
+  },
+  "currentData": {
+    "Dana Passage": {
+      "current_predictions": {
+        "units": "feet, knots",
+        "cp": [
+          {
+            "Type": "slack",
+            "meanFloodDir": 242,
+            "Bin": "12",
+            "meanEbbDir": 49,
+            "Time": "2025-01-01 00:32",
+            "Depth": "16",
+            "Velocity_Major": 0.01
+          },
+          {
+            "Type": "flood",
+            "meanFloodDir": 242,
+            "Bin": "12",
+            "meanEbbDir": 49,
+            "Time": "2025-01-01 03:19",
+            "Depth": "16",
+            "Velocity_Major": 2.3
+          },
+          {
+            "Type": "slack",
+            "meanFloodDir": 242,
+            "Bin": "12",
+            "meanEbbDir": 49,
+            "Time": "2025-01-01 07:22",
+            "Depth": "16",
+            "Velocity_Major": 0
+          },
+          {
+            "Type": "ebb",
+            "meanFloodDir": 242,
+            "Bin": "12",
+            "meanEbbDir": 49,
+            "Time": "2025-01-01 10:04",
+            "Depth": "16",
+            "Velocity_Major": -1.47
+          },
+          {
+            "Type": "slack",
+            "meanFloodDir": 242,
+            "Bin": "12",
+            "meanEbbDir": 49,
+            "Time": "2025-01-01 13:09",
+            "Depth": "16",
+            "Velocity_Major": 0
+          },
+          {
+            "Type": "flood",
+            "meanFloodDir": 242,
+            "Bin": "12",
+            "meanEbbDir": 49,
+            "Time": "2025-01-01 15:17",
+            "Depth": "16",
+            "Velocity_Major": 1.36
+          },
+          {
+            "Type": "slack",
+            "meanFloodDir": 242,
+            "Bin": "12",
+            "meanEbbDir": 49,
+            "Time": "2025-01-01 17:49",
+            "Depth": "16",
+            "Velocity_Major": 0
+          },
+          {
+            "Type": "ebb",
+            "meanFloodDir": 242,
+            "Bin": "12",
+            "meanEbbDir": 49,
+            "Time": "2025-01-01 21:28",
+            "Depth": "16",
+            "Velocity_Major": -2.84
+          }
+        ]
+      }
+    }
+  }
+}
