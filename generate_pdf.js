@@ -2,7 +2,6 @@ const PDFDocument = require('pdfkit');
 const fs = require('fs');
 const { fetchTideData, fetchHourlyTideData, fetchCurrentData, tideStations, currentStations } = require('./fetch_data.js');
 const SunCalc = require('suncalc');
-const QuickChart = require('quickchart-js');
 const moonPhases = require('./moon_phases.js');
 
 function formatTime(dateTimeString) {
@@ -48,90 +47,104 @@ function drawMoonIcon(doc, x, y, phase, radius) {
     doc.restore();
 }
 
-async function generateTideGraph(hourlyData, hiloData, width, height) {
-    if (!hourlyData || hourlyData.length === 0) return null;
+function drawTideGraph(doc, hiloData, x, y, width, height) {
+    if (!hiloData || hiloData.length < 2) return;
 
-    const labels = hourlyData.map(p => formatTime(p.t));
-    const values = hourlyData.map(p => parseFloat(p.v));
+    doc.save();
+    doc.translate(x, y);
 
-    const hiloLabels = {};
-    hiloData.forEach(p => {
-        const time = formatTime(p.t);
-        const label = `${p.type}${parseFloat(p.v).toFixed(1)}`;
-        hiloLabels[time] = label;
+    const points = hiloData.map(p => ({
+        time: new Date(p.t).getTime(),
+        value: parseFloat(p.v)
+    }));
+
+    const minTime = points[0].time;
+    const maxTime = points[points.length - 1].time;
+    const timeRange = maxTime - minTime;
+
+    const values = points.map(p => p.value);
+    const minValue = Math.min(...values);
+    const maxValue = Math.max(...values);
+    const valueRange = maxValue - minValue;
+
+    const timeToX = (time) => ((time - minTime) / timeRange) * width;
+    const valueToY = (value) => height - ((value - minValue) / valueRange) * (height * 0.8) - (height * 0.1);
+
+    // Draw grid lines
+    doc.lineWidth(0.5).strokeColor('#e0e0e0');
+    for (let i = 0; i <= 4; i++) {
+        const lineY = (height / 4) * i;
+        doc.moveTo(0, lineY).lineTo(width, lineY).stroke();
+    }
+    const midY = valueToY(0);
+    doc.lineWidth(0.5).strokeColor('black').moveTo(0, midY).lineTo(width, midY).stroke();
+
+
+    // Draw curve
+    doc.lineWidth(1).strokeColor('black');
+    const firstPoint = points[0];
+    doc.moveTo(timeToX(firstPoint.time), valueToY(firstPoint.value));
+    for (let i = 0; i < points.length - 1; i++) {
+        const p1 = points[i];
+        const p2 = points[i + 1];
+        const x1 = timeToX(p1.time);
+        const y1 = valueToY(p1.value);
+        const x2 = timeToX(p2.time);
+        const y2 = valueToY(p2.value);
+        const cp1x = x1 + (x2 - x1) / 2;
+        const cp2x = x1 + (x2 - x1) / 2;
+        doc.bezierCurveTo(cp1x, y1, cp2x, y2, x2, y2);
+    }
+    doc.stroke();
+
+    // Draw points and labels
+    const avgValue = values.reduce((a, b) => a + b, 0) / values.length;
+    points.forEach((p, index) => {
+        const px = timeToX(p.time);
+        const py = valueToY(p.value);
+        doc.circle(px, py, 2).fill('black');
+
+        const label = parseFloat(p.value).toFixed(2);
+        const isVisuallyHigh = p.value > avgValue;
+        const labelY = isVisuallyHigh ? py + 4 : py - 10;
+        
+        doc.fontSize(5).fill('black').font('Helvetica-Bold').text(label, px - 10, labelY, { width: 20, align: 'center' });
     });
 
-    const chart = new QuickChart();
-    chart.setWidth(width).setHeight(height).setBackgroundColor('white');
-    chart.setConfig({
-        type: 'line',
-        data: {
-            labels: labels,
-            datasets: [{
-                data: values,
-                fill: false,
-                borderColor: 'black',
-                borderWidth: 1,
-                pointRadius: 2,
-                pointBackgroundColor: 'black',
-                datalabels: {}
-            }]
-        },
-        options: {
-            plugins: {
-                datalabels: {
-                    display: (context) => !!context.chart.options.plugins.datalabels.customLabels[context.chart.data.labels[context.dataIndex]],
-                    formatter: (value, context) => context.chart.options.plugins.datalabels.customLabels[context.chart.data.labels[context.dataIndex]] || '',
-                    align: 'top',
-                    color: 'black',
-                    font: {
-                        size: 8
-                    },
-                    customLabels: hiloLabels
-                }
-            },
-            legend: {
-                display: false
-            },
-            title: {
-                display: false
-            },
-            scales: {
-                xAxes: [{
-                    gridLines: {
-                        display: true,
-                        color: '#e0e0e0'
-                    },
-                    ticks: {
-                        fontSize: 8,
-                        fontColor: 'black',
-                        autoSkip: true,
-                        maxTicksLimit: 5
-                    }
-                }],
-                yAxes: [{
-                    display: false
-                }]
-            }
+    // Draw X-axis labels (e.g., 06:00, 12:00, 18:00)
+    const hours = [6, 12, 18];
+    const dayStart = new Date(points[0].time);
+    dayStart.setHours(0, 0, 0, 0);
+
+    hours.forEach(hour => {
+        const labelTime = new Date(dayStart.getTime());
+        labelTime.setHours(hour);
+        if (labelTime.getTime() >= minTime && labelTime.getTime() <= maxTime) {
+            const labelX = timeToX(labelTime.getTime());
+            // Draw vertical line
+            doc.lineWidth(0.5).strokeColor('#e0e0e0').moveTo(labelX, 0).lineTo(labelX, height).stroke();
+            // Draw label
+            doc.fontSize(7).fill('black').font('Helvetica-Bold').text(`${String(hour).padStart(2, '0')}:00`, labelX - 15, height + 2, { width: 30, align: 'center' });
         }
     });
 
-    return chart.toDataUrl();
+    doc.restore();
 }
 
+
 async function generatePdf() {
-    const testMode = false;
+    const testMode = true;
     const graphStations = { "Port Townsend": true, "Seattle": true };
     
-    const pageWidth = 306;
-    const pageHeight = 792;
+    const pageWidth = 288;
+    const pageHeight = 576;
     const margin = 10;
     const dividerX = pageWidth * 0.45;
 
     const sizes = {
-        headerLg: 14, headerSm: 8, title: 10, stationName: 9, data: 8,
-        lineSpacing: 2, stationSpacing: 6, graphHeight: 40, graphBottomMargin: 3,
-        tideLineHeight: 9, moonIconRadius: 9
+        headerLg: 11, headerSm: 6, title: 8, stationName: 7, data: 6,
+        lineSpacing: 0.5, stationSpacing: 2, graphHeight: 30, graphBottomMargin: 2,
+        tideLineHeight: 7, moonIconRadius: 7
     };
 
     const year = 2026;
@@ -166,20 +179,25 @@ async function generatePdf() {
         const moonIllumination = SunCalc.getMoonIllumination(date);
         const moonPhaseName = getMoonPhaseName(moonIllumination.phase);
 
-        doc.fontSize(sizes.headerLg).font('Helvetica-Bold').text(date.toLocaleDateString('en-US', { weekday: 'long' }).toUpperCase(), margin, margin);
-        doc.fontSize(sizes.headerLg).font('Helvetica-Bold').text(date.toLocaleDateString('en-US', { month: 'long', day: 'numeric' }).toUpperCase(), margin, margin + sizes.headerLg);
+        doc.fontSize(sizes.headerLg).font('Helvetica-Bold').text(date.toLocaleDateString('en-US', { weekday: 'long' }).toUpperCase(), margin + 13, margin);
+        doc.fontSize(sizes.headerLg).font('Helvetica-Bold').text(date.toLocaleDateString('en-US', { month: 'long', day: 'numeric' }).toUpperCase(), margin + 13, margin + sizes.headerLg);
         
         drawMoonIcon(doc, pageWidth / 2, margin + sizes.moonIconRadius, moonIllumination.phase, sizes.moonIconRadius);
         doc.fontSize(sizes.headerSm).font('Helvetica').text(moonPhaseName, pageWidth / 2 - 30, margin + sizes.moonIconRadius * 2 + 2, { width: 60, align: 'center' });
 
         doc.fontSize(sizes.headerSm).font('Helvetica')
            .text(`SUNRISE ${sunrise}`, 0, margin + 3, { align: 'right', width: pageWidth - margin })
-           .text(`SUNSET ${sunset}`, 0, margin + 15, { align: 'right', width: pageWidth - margin });
+           .text(`SUNSET ${sunset}`, 0, margin + 10, { align: 'right', width: pageWidth - margin });
 
-        let currentY = margin + 40;
-        doc.fontSize(sizes.title).font('Helvetica-Bold')
-           .text('CURRENT PREDICTIONS', margin, currentY, { width: dividerX - margin, align: 'center', underline: true })
-           .text('HIGH AND LOW TIDES', dividerX, currentY, { width: pageWidth - dividerX - margin, align: 'center', underline: true });
+        let currentY = margin + 25;
+        doc.font('Helvetica-Bold').fontSize(sizes.title)
+           .text('CURRENT PREDICTIONS', margin, currentY, { width: dividerX - margin, align: 'center' })
+           .text('HIGH AND LOW TIDES', dividerX, currentY, { width: pageWidth - dividerX - margin, align: 'center' });
+        
+        const underlineY = currentY + sizes.title + 1;
+        doc.lineWidth(1).moveTo(margin, underlineY).lineTo(dividerX - margin, underlineY).stroke();
+        doc.lineWidth(1).moveTo(dividerX + margin, underlineY).lineTo(pageWidth - margin, underlineY).stroke();
+
         currentY += sizes.title + 5;
         doc.moveTo(dividerX, currentY - 2).lineTo(dividerX, pageHeight - margin).stroke();
 
@@ -214,13 +232,9 @@ async function generatePdf() {
         for (const [name, id] of Object.entries(tideStations)) {
             const tidesForDay = (allTideData[name]?.predictions || []).filter(p => p.t.startsWith(dayString));
             
-            if (graphStations[name]) {
-                const hourlyData = (allHourlyTideData[name]?.predictions || []).filter(p => p.t.startsWith(dayString));
-                const graphDataUrl = await generateTideGraph(hourlyData, tidesForDay, (pageWidth - dividerX - margin * 2) * 2, sizes.graphHeight * 2);
-                if (graphDataUrl) {
-                    doc.image(graphDataUrl, dividerX + margin, tidesY, { width: pageWidth - dividerX - margin * 2 });
-                    tidesY += sizes.graphHeight + sizes.graphBottomMargin;
-                }
+            if (graphStations[name] && tidesForDay.length > 0) {
+                drawTideGraph(doc, tidesForDay, dividerX + margin, tidesY, pageWidth - dividerX - margin * 2, sizes.graphHeight);
+                tidesY += sizes.graphHeight + sizes.graphBottomMargin + 8; // Add extra space for x-axis labels
             }
 
             doc.fontSize(sizes.stationName).font('Helvetica-Bold').text(name, dividerX, tidesY, { width: pageWidth - dividerX, align: 'center' });
