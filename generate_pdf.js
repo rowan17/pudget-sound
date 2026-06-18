@@ -133,7 +133,7 @@ function drawTideGraph(doc, hiloData, x, y, width, height) {
 
 
 async function generatePdf() {
-    const testMode = true;
+    const testMode = false;
     const graphStations = { "Port Townsend": true, "Seattle": true };
     
     const pageWidth = 288;
@@ -147,7 +147,7 @@ async function generatePdf() {
         tideLineHeight: 7, moonIconRadius: 7
     };
 
-    const year = 2026;
+    const year = 2027;
     const startDate = new Date(year, 0, 1);
     const endDate = testMode ? startDate : new Date(year, 11, 31);
 
@@ -167,7 +167,28 @@ async function generatePdf() {
             allHourlyTideData[name] = await fetchHourlyTideData(id, startDate, endDate);
         }
     }
-    console.log('Data fetched successfully.');
+
+    // Completeness check: NOAA chunks can fail transiently and leave silent
+    // gaps, so verify every station covers every day before declaring success.
+    let expectedDays = 0;
+    for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) expectedDays++;
+    const distinctDays = list => new Set(list.map(s => s.slice(0, 10))).size;
+    const gaps = [];
+    for (const [name, data] of Object.entries(allCurrentData)) {
+        const days = distinctDays((data.current_predictions?.cp || []).map(p => p.Time));
+        if (days < expectedDays) gaps.push(`current "${name}": ${days}/${expectedDays} days`);
+    }
+    for (const [name, data] of Object.entries(allTideData)) {
+        const days = distinctDays((data.predictions || []).map(p => p.t));
+        if (days < expectedDays) gaps.push(`tide "${name}": ${days}/${expectedDays} days`);
+    }
+    if (gaps.length > 0) {
+        console.warn(`\n⚠ WARNING: incomplete data — the book will have gaps:`);
+        gaps.forEach(g => console.warn(`    - ${g}`));
+        console.warn('  Re-run to retry the failed NOAA requests.\n');
+    } else {
+        console.log(`Data fetched successfully — all stations cover ${expectedDays} days.`);
+    }
 
     for (let day = new Date(startDate); day <= endDate; day.setDate(day.getDate() + 1)) {
         const date = new Date(day);
